@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getRecipeImageUrl } from '@/utils/imageUtils';
 
 // Initialize the Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -7,8 +8,9 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export async function POST(request: Request) {
   try {
-    const { ingredients } = await request.json();
+    const { ingredients, existingRecipes = [] } = await request.json();
     console.log('Received ingredients:', ingredients);
+    console.log('Existing recipes count:', existingRecipes.length);
 
     if (!ingredients || !Array.isArray(ingredients) || ingredients.length === 0) {
       return NextResponse.json(
@@ -17,8 +19,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = `Create 3 different recipes using these ingredients: ${ingredients.join(', ')}.
-    Return the recipes in this exact JSON format:
+    // Build a prompt that will generate diverse recipes
+    let prompt = `Create 3 different recipes using these ingredients: ${ingredients.join(', ')}.
+    `;
+
+    // If there are existing recipes, ask for different ones
+    if (existingRecipes.length > 0) {
+      prompt += `\nMake sure these recipes are DIFFERENT from the following existing recipes:\n`;
+      existingRecipes.forEach((recipe: any, index: number) => {
+        prompt += `${index + 1}. ${recipe.title}\n`;
+      });
+      prompt += `\nCreate completely different types of dishes that are not similar to the ones above.\n`;
+    }
+
+    prompt += `Return the recipes in this exact JSON format:
     {
       "recipes": [
         {
@@ -54,17 +68,17 @@ export async function POST(request: Request) {
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       console.log('Response text:', text);
-      
+
       try {
         // Remove markdown code block formatting if present
         const cleanText = text.replace(/```json\n|\n```/g, '').trim();
         const data = JSON.parse(cleanText);
         console.log('Parsed recipe data:', data);
 
-        // Add image URLs to each recipe
+        // Add image URLs to each recipe based on their titles
         const recipes = data.recipes.map((recipe: any) => ({
           ...recipe,
-          imageUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1000&auto=format&fit=crop',
+          imageUrl: getRecipeImageUrl(recipe.title),
         }));
 
         return NextResponse.json({ recipes });
@@ -90,4 +104,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

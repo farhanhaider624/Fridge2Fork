@@ -1,21 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import RecipeCard from '@/components/RecipeCard';
+import IngredientInput from '@/components/IngredientInput';
+import Header from '@/components/Header';
+import LoadingAnimation from '@/components/LoadingAnimation';
+import RecipeDetail from '@/components/RecipeDetail';
+import { useRecipes } from '@/context/RecipesContext';
 
 export default function Home() {
-  const [ingredients, setIngredients] = useState<string[]>([]);
-  const [recipes, setRecipes] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [expandedRecipeIndex, setExpandedRecipeIndex] = useState<number | null>(null);
+  // Use global state from context
+  const {
+    recipes, setRecipes,
+    ingredients, setIngredients,
+    isLoading, setIsLoading,
+    error, setError,
+    showGenerateMore, setShowGenerateMore,
+    recipeBatches, setRecipeBatches
+  } = useRecipes();
 
-  const handleAddIngredient = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-      setIngredients([...ingredients, e.currentTarget.value.trim()]);
-      e.currentTarget.value = '';
-    }
+  const [selectedRecipeIndex, setSelectedRecipeIndex] = useState<number | null>(null);
+
+  const handleAddIngredient = (ingredient: string) => {
+    setIngredients([...ingredients, ingredient]);
   };
 
   const handleRemoveIngredient = (index: number) => {
@@ -30,7 +38,7 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
-    setExpandedRecipeIndex(null); // Reset expanded state when generating new recipes
+    setSelectedRecipeIndex(null); // Reset selected recipe when generating new recipes
 
     try {
       const response = await fetch('/api/generate-recipe', {
@@ -38,7 +46,10 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ingredients }),
+        body: JSON.stringify({
+          ingredients,
+          existingRecipes: [] // No existing recipes for initial generation
+        }),
       });
 
       const data = await response.json();
@@ -48,6 +59,8 @@ export default function Home() {
       }
 
       setRecipes(data.recipes);
+      setRecipeBatches([data.recipes.length]); // Track the number of recipes in the first batch
+      setShowGenerateMore(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -55,80 +68,133 @@ export default function Home() {
     }
   };
 
-  const handleToggleRecipe = (index: number) => {
-    setExpandedRecipeIndex(expandedRecipeIndex === index ? null : index);
+  const handleSelectRecipe = (index: number) => {
+    setSelectedRecipeIndex(index);
+  };
+
+  const handleBackToList = () => {
+    setSelectedRecipeIndex(null);
+  };
+
+  const handleGenerateMore = async () => {
+    // Keep the existing recipes and add more
+    if (ingredients.length === 0) {
+      setError('Please add at least one ingredient');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/generate-recipe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ingredients,
+          existingRecipes: recipes // Pass existing recipes to avoid duplicates
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate recipes');
+      }
+
+      // Append new recipes to existing ones
+      setRecipes([...recipes, ...data.recipes]);
+
+      // Keep track of batches internally (might be useful for future features)
+      setRecipeBatches([...recipeBatches, data.recipes.length]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 py-8">
-      <div className="container mx-auto px-4">
-        <h1 className="text-4xl font-bold text-center mb-8">Fridge2Fork</h1>
-        
-        <div className="max-w-2xl mx-auto mb-8">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Add Ingredients</h2>
-            <input
-              type="text"
-              placeholder="Type an ingredient and press Enter"
-              onKeyDown={handleAddIngredient}
-              className="w-full p-2 border rounded mb-4"
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+
+      <main className="container mx-auto px-4 py-8 max-w-7xl">
+        {selectedRecipeIndex !== null ? (
+          <div className="max-w-4xl mx-auto">
+            <RecipeDetail
+              recipe={recipes[selectedRecipeIndex]}
+              onBack={handleBackToList}
             />
-            
-            <div className="flex flex-wrap gap-2 mb-4">
-              {ingredients.map((ingredient, index) => (
-                <motion.span
-                  key={index}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full flex items-center gap-2"
-                >
-                  {ingredient}
-                  <button
-                    onClick={() => handleRemoveIngredient(index)}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    ×
-                  </button>
-                </motion.span>
-              ))}
+          </div>
+        ) : (
+          <>
+            <div className="max-w-6xl mx-auto mb-8">
+              <IngredientInput
+                ingredients={ingredients}
+                onAddIngredient={handleAddIngredient}
+                onRemoveIngredient={handleRemoveIngredient}
+                onGenerateRecipe={handleGenerateRecipes}
+                isLoading={isLoading}
+              />
+
+              {error && (
+                <p className="text-red-500 mt-4 text-center">{error}</p>
+              )}
             </div>
 
-            <button
-              onClick={handleGenerateRecipes}
-              disabled={isLoading}
-              className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 disabled:bg-blue-300"
-            >
-              {isLoading ? 'Generating Recipes...' : 'Generate Recipes'}
-            </button>
-
-            {error && (
-              <p className="text-red-500 mt-4 text-center">{error}</p>
+            {isLoading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="max-w-4xl mx-auto"
+              >
+                <LoadingAnimation />
+              </motion.div>
             )}
-          </div>
-        </div>
 
-        <AnimatePresence>
-          {recipes.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="max-w-2xl mx-auto space-y-6"
-            >
-              {recipes.map((recipe, index) => (
-                <div key={index} className="w-full">
-                  <RecipeCard 
-                    recipe={recipe}
-                    isExpanded={expandedRecipeIndex === index}
-                    onToggle={() => handleToggleRecipe(index)}
-                  />
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </main>
+            <AnimatePresence>
+              {!isLoading && recipes.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="max-w-6xl mx-auto"
+                >
+                  <h2 className="text-2xl font-bold text-gray-800 mb-6">Possible Recipes ({recipes.length})</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    {recipes.map((recipe, index) => (
+                      <div key={index} className="w-full">
+                        <RecipeCard
+                          recipe={recipe}
+                          isExpanded={false}
+                          onToggle={() => handleSelectRecipe(index)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {showGenerateMore && (
+                    <div className="flex justify-center mb-8">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleGenerateMore}
+                        className="px-6 py-2 bg-white border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-colors"
+                      >
+                        Generate More
+                      </motion.button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
+      </main>
+    </div>
   );
 }
