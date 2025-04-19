@@ -19,8 +19,6 @@ interface RecipeCardProps {
 
 export default function RecipeCard({ recipe, isExpanded, onToggle }: RecipeCardProps) {
   const [isFavorite, setIsFavorite] = useState(false);
-  const [servingMultiplier, setServingMultiplier] = useState(1);
-
   const handlePrint = () => {
     window.print();
   };
@@ -35,10 +33,6 @@ export default function RecipeCard({ recipe, isExpanded, onToggle }: RecipeCardP
     } catch (error) {
       console.log('Sharing failed:', error);
     }
-  };
-
-  const adjustServings = (multiplier: number) => {
-    setServingMultiplier(multiplier);
   };
 
   return (
@@ -89,32 +83,13 @@ export default function RecipeCard({ recipe, isExpanded, onToggle }: RecipeCardP
           </span>
           <span className="flex items-center gap-1">
             <UserIcon className="w-4 h-4" />
-            {recipe.servings * servingMultiplier} servings
+            {recipe.servings} servings
           </span>
           <span className="flex items-center gap-1">
             <AdjustmentsHorizontalIcon className="w-4 h-4" />
             {recipe.difficulty}
           </span>
         </div>
-        
-        {isExpanded && (
-          <div className="mb-4 flex items-center gap-2">
-            <span className="text-sm text-gray-600">Adjust servings:</span>
-            <button
-              onClick={() => adjustServings(Math.max(0.5, servingMultiplier - 0.5))}
-              className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              -
-            </button>
-            <span className="text-sm font-medium">{servingMultiplier}x</span>
-            <button
-              onClick={() => adjustServings(servingMultiplier + 0.5)}
-              className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              +
-            </button>
-          </div>
-        )}
 
         <button
           onClick={onToggle}
@@ -122,7 +97,7 @@ export default function RecipeCard({ recipe, isExpanded, onToggle }: RecipeCardP
         >
           {isExpanded ? 'Show Less' : 'Show More'}
         </button>
-        
+
         <AnimatePresence>
           {isExpanded && (
             <motion.div
@@ -160,4 +135,4 @@ export default function RecipeCard({ recipe, isExpanded, onToggle }: RecipeCardP
       </div>
     </motion.div>
   );
-} 
+}
